@@ -1,0 +1,79 @@
+﻿@page "/"
+@using System.IO.Compression
+@using System.IO
+ 
+<h1>InkViewer</h1>
+
+<InputFile OnChange="@LoadFile"></InputFile>
+<div class="container">
+    @if (svgList != null && svgList.Count > 0)
+    {
+        <div>
+            @foreach (var svg in svgList.OrderBy(s => s.Key))
+            {
+            <h2>@svg.Key</h2>
+            <div>@(new MarkupString(svg.Value))</div>
+            }
+        </div>
+    }
+</div>
+
+@code
+{
+    public Dictionary<string, string> svgList;
+
+    private async Task LoadFile(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        svgList = await GetContentAsync(e.File, ".svg");
+    }
+
+    /// <summary>
+    /// Retrieves the files matching the extension..
+    /// </summary>
+    /// <param name="file"></param>
+    /// <param name="extension"></param>
+    /// <param name="format"></param>
+    /// <returns></returns>
+    public async Task<Dictionary<string, string>> GetContentAsync(IBrowserFile file, string extension, string format = "{0}")
+    {
+        var contentList = new Dictionary<string, string>();
+
+        extension = extension.ToLower();
+
+        try
+        {
+            using (var fileStream = file.OpenReadStream())
+            {
+                using (var memoryStream = new MemoryStream())
+                {
+                    await fileStream.CopyToAsync(memoryStream);
+
+                    using (var zip = new ZipArchive(memoryStream, ZipArchiveMode.Read))
+                    {
+                        var svgs = zip.Entries.Where(e => e.FullName.ToLower().EndsWith(extension));
+                        foreach (var entry in svgs)
+                        {
+                            Console.WriteLine(entry.FullName);
+                            using (var stream = entry.Open())
+                            {
+                                using (var streamReader = new StreamReader(stream))
+                                {
+                                    var content = await streamReader.ReadToEndAsync();
+                                    contentList.Add(entry.FullName, string.Format(format, content));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            Console.WriteLine(ex.StackTrace);
+        }
+
+        return contentList;
+    }
+}
